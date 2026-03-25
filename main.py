@@ -11,38 +11,24 @@ Main entry point for the CLI game. Orchestrates the full game flow:
 7. Print match result.
 """
 
+from auction import display_squads, run_auction
 from data import load_players, select_auction_pool
-from auction import run_auction, display_squads
 from match import simulate_match
 from models import Team
 
 
 def main() -> None:
-    """Main entry point for the IPL Simulator.
+    players = load_players("assets/unified_players.json")
+    pool = select_auction_pool(players, n=10, method="top")
 
-    Orchestrates the complete game session:
-    1. Load all players from the JSON file.
-    2. Prompt for number of managers (2-4) and their names.
-    3. Select auction pool (~30-40 players).
-    4. Run the auction phase.
-    5. Display finalized team squads.
-    6. Prompt user to select two teams for the match.
-    7. Simulate and display match result.
+    num = int(input("How many managers (2–4)? "))
+    manager_names = []
+    for i in range(num):
+        manager_names.append(
+            input(f"Manager {i + 1} name: ").strip() or f"Manager {i + 1}"
+        )
 
-    TODO:
-        - Load players using load_players("assets/unified_players.json").
-        - Print initial stats (total players, role counts, top 10 by rating).
-        - Prompt for number of managers (validate 2-4).
-        - Prompt for each manager's name.
-        - Select auction pool using select_auction_pool().
-        - Call run_auction() with players and manager names.
-        - Call display_squads() to show team rosters.
-        - Prompt user to select two teams for the match.
-        - Call simulate_match() with selected teams.
-        - Print match result (scores, winner, margin).
-    """
-    # TODO: Implement main game flow
-    pass
+    run_auction(pool, manager_names, squad_size=3, starting_budget=20.0)
 
 
 def get_manager_names() -> list[str]:
@@ -87,8 +73,7 @@ def select_match_teams(teams: list[Team]) -> tuple[Team, Team]:
     pass
 
 
-def print_match_result(result: 'MatchResult', team_a: Team,
-                       team_b: Team) -> None:
+def print_match_result(result: "MatchResult", team_a: Team, team_b: Team) -> None:
     """Display the match result to the user.
 
     Prints a formatted summary of the match:

@@ -8,83 +8,133 @@ to build their teams.
 from models import Player, Team
 
 
-def run_auction(players: list[Player], manager_names: list[str],
-                squad_size: int = 6, starting_budget: float = 100.0) -> list[Team]:
-    """Run the complete player auction for all managers.
+def run_auction(
+    players: list[Player],
+    manager_names: list[str],
+    squad_size: int = 6,
+    starting_budget: float = 100.0,
+) -> list[Team]:
 
-    Orchestrates the full auction flow:
-    1. Initialize teams with empty squads and budgets.
-    2. Iterate through each player in the auction pool.
-    3. For each player, run a bidding round among active managers.
-    4. Assign won players to the winning manager's team.
-    5. Continue until all players are processed or squads are full.
+    teams: list[Team] = [
+        Team(manager_name=name, budget=starting_budget) for name in manager_names
+    ]
 
-    Args:
-        players: List of players available for auction.
-        manager_names: Names of the human managers participating.
-        squad_size: Target number of players per team.
-        starting_budget: Starting budget in crore for each manager.
+    for player in players:
+        if all(len(team.players) >= squad_size for team in teams):
+            print("\nAll teams have reached the squad size. AUCTION ENDED")
+            break
 
-    Returns:
-        List of Team objects with their drafted players.
+        active_managers: Set[str] = (
+            t.manager_name for t in teams if len(t.players) < squad_size
+        )
 
-    TODO:
-        - Initialize Team objects for each manager.
-        - Implement per-player auction loop (show player card, bidding).
-        - Implement round-robin bidding logic with pass/bid options.
-        - Track current_price, current_winner, active_bidders.
-        - Handle unsold players (all pass).
-        - Stop early if all teams reach squad_size.
-        - Print post-auction squad summaries.
-    """
-    # TODO: Implement auction orchestration
-    pass
+        winner_name, final_price = auction_player(player, teams, active_managers)
+
+        if not winner_name:
+            print(f"NO BIDS for {player.name}. PLAYER UNSOLD")
+            continue
+
+        for team in teams:
+            if team.manager_name == winner_name:
+                team.players.append(player)
+                team.budget -= final_price
+                print(
+                    f"SOLD: {player.name} to {team.manager_name} "
+                    f"for {final_price} Cr. (Budget left: {team.budget:.2f} Cr)\n"
+                )
+                break
+
+    print("\n=== Auction complete! ===\n")
+    display_squads(teams)
+    return teams
 
 
-def auction_player(player: Player, teams: list[Team],
-                   active_managers: set[str]) -> tuple[str | None, float]:
-    """Conduct a single-player auction round.
+def auction_player(
+    player: Player, teams: list[Team], active_managers: set[str]
+) -> tuple[str | None, float]:
 
-    Runs the bidding process for one player:
-    1. Display player card (name, role, base price, ratings).
-    2. Initialize bidding at player.base_price.
-    3. Round-robin through managers for bids or passes.
-    4. Determine winner when only one bidder remains or all pass.
+    print("=" * 80)
+    print(
+        f"Auctioning: {player.name} | Role: {player.role.upper()} | "
+        f"Rating: {player.overall_rating} | Base: {player.base_price} Cr"
+    )
+    print("=" * 80)
 
-    Args:
-        player: The player being auctioned.
-        teams: List of all teams (to access manager names and budgets).
-        active_managers: Set of manager names still in the bidding.
+    current_price = player.base_price
+    current_winner: str | None = None
+    opened = False  # has anyone placed a valid bid yet?
 
-    Returns:
-        Tuple of (winning_manager_name or None, final_price).
+    # Turn-based loop until we have a winner or everyone passes
+    while active_managers:
+        for team in teams:
+            if team.manager_name not in active_managers:
+                continue
 
-    TODO:
-        - Display player card with all relevant info.
-        - Implement bidding loop with user input prompts.
-        - Handle bid validation (must be >= current_price).
-        - Handle pass logic (remove from active_bidders).
-        - Determine winner when one bidder remains.
-        - Handle case where all pass (player unsold).
-    """
-    # TODO: Implement single-player auction logic
-    pass
+            print(f"\nCurrent price: {current_price} Cr")
+            print(
+                f"{team.manager_name}'s turn "
+                f"(budget: {team.budget:.2f} Cr, 'p' to pass): ",
+                end="",
+            )
+            raw = input().strip().lower()
+
+            if raw in {"p", "pass", ""}:
+                print(f"{team.manager_name} passes.")
+                active_managers.remove(team.manager_name)
+                if not active_managers:
+                    break
+                continue
+
+            try:
+                bid = float(raw)
+            except ValueError:
+                print("Invalid bid. Treated as pass.")
+                active_managers.remove(team.manager_name)
+                if not active_managers:
+                    break
+                continue
+
+            if bid < current_price:
+                print("Bid must be >= current price. Treated as pass.")
+                active_managers.remove(team.manager_name)
+                if not active_managers:
+                    break
+                continue
+
+            if bid > team.budget:
+                print("You don't have enough budget. Treated as pass.")
+                active_managers.remove(team.manager_name)
+                if not active_managers:
+                    break
+                continue
+
+            opened = True
+            current_price = bid
+            current_winner = team.manager_name
+            print(f"{team.manager_name} bids {current_price} Cr for {player.name}.")
+
+        # End conditions
+        if not opened and not active_managers:
+            # everyone passed without opening
+            return None, 0.0
+
+        if opened and (len(active_managers) <= 1):
+            # one or zero active bidders left after at least one bid
+            break
+
+    return current_winner, current_price if current_winner else (None, 0.0)
 
 
 def display_squads(teams: list[Team]) -> None:
-    """Print all team squads after the auction.
-
-    Displays each team's roster in a formatted manner:
-    - Team header with manager name.
-    - Numbered list of players with role and overall rating.
-
-    Args:
-        teams: List of teams with their drafted players.
-
-    TODO:
-        - Format and print team headers (e.g., "=== Team Rudra ===").
-        - List players with index, name, role (uppercase), and rating.
-        - Sort players by role or rating for better readability.
-    """
-    # TODO: Implement squad display formatting
-    pass
+    """Print all squads in a readable format."""
+    for team in teams:
+        print(f"Team {team.manager_name} (Budget left: {team.budget:.2f} Cr)")
+        if not team.players:
+            print("  [No players]")
+        else:
+            for p in team.players:
+                print(
+                    f"  - {p.name} ({p.role.upper()}, "
+                    f"Rating: {p.overall_rating}, Base: {p.base_price} Cr)"
+                )
+        print()

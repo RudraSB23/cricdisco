@@ -20,6 +20,7 @@ class Player:
         overall_rating: Overall strength rating (0-100).
         base_price: Base auction price in crore.
     """
+
     id: int
     name: str
     role: str
@@ -38,6 +39,7 @@ class Team:
         budget: Remaining budget in crore (optional, can be very large).
         players: List of players drafted to this team.
     """
+
     manager_name: str
     budget: float
     players: list[Player] = field(default_factory=list)
@@ -52,6 +54,7 @@ class GameState:
         auction_pool: List of players available for auction.
         sold_players: Mapping of player_id to manager_name for sold players.
     """
+
     teams: list[Team]
     auction_pool: list[Player]
     sold_players: dict[int, str] = field(default_factory=dict)
@@ -67,6 +70,7 @@ class InningsResult:
         balls: Total balls bowled.
         ball_log: List of ball-by-ball outcome descriptions.
     """
+
     runs: int
     wickets: int
     balls: int
@@ -83,6 +87,7 @@ class MatchResult:
         winner: Name of the winning team (None if tie).
         margin: Description of winning margin (e.g., "by 3 runs").
     """
+
     team_a_result: InningsResult
     team_b_result: InningsResult
     winner: str | None

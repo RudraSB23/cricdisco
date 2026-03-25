@@ -4,7 +4,7 @@ Match simulation logic for the IPL Simulator.
 Handles ball-by-ball simulation of a 5-over match between two teams.
 """
 
-from models import Team, InningsResult, MatchResult
+from models import InningsResult, MatchResult, Team
 
 
 def simulate_match(team_a: Team, team_b: Team, overs: int = 5) -> MatchResult:
@@ -37,8 +37,9 @@ def simulate_match(team_a: Team, team_b: Team, overs: int = 5) -> MatchResult:
     pass
 
 
-def simulate_innings(batting_team: Team, bowling_team: Team,
-                     overs: int = 5, target: int | None = None) -> InningsResult:
+def simulate_innings(
+    batting_team: Team, bowling_team: Team, overs: int = 5, target: int | None = None
+) -> InningsResult:
     """Simulate a single innings of a match.
 
     Simulates ball-by-ball cricket action:
@@ -73,7 +74,7 @@ def simulate_innings(batting_team: Team, bowling_team: Team,
     pass
 
 
-def simulate_ball(batter: 'Player', bowler: 'Player') -> dict:
+def simulate_ball(batter: "Player", bowler: "Player") -> dict:
     """Simulate a single ball delivery and determine outcome.
 
     Models the contest between batter and bowler:
@@ -107,7 +108,7 @@ def simulate_ball(batter: 'Player', bowler: 'Player') -> dict:
     pass
 
 
-def select_playing_xi(team: Team, n: int = 11) -> list['Player']:
+def select_playing_xi(team: Team, n: int = 11) -> list["Player"]:
     """Select the best playing XI from a team's squad.
 
     If squad has more than n players, selects the top n by overall_rating.
@@ -129,7 +130,7 @@ def select_playing_xi(team: Team, n: int = 11) -> list['Player']:
     pass
 
 
-def get_batting_order(players: list['Player']) -> list['Player']:
+def get_batting_order(players: list["Player"]) -> list["Player"]:
     """Determine the batting order for a team.
 
     Sorts players by batting_rating (descending), with overall_rating
@@ -150,7 +151,7 @@ def get_batting_order(players: list['Player']) -> list['Player']:
     pass
 
 
-def get_bowling_rotation(players: list['Player']) -> list['Player']:
+def get_bowling_rotation(players: list["Player"]) -> list["Player"]:
     """Determine the bowling rotation for a team.
 
     Sorts players by bowling_rating (descending) to create a
