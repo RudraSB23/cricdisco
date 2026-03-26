@@ -121,3 +121,12 @@ class Session(commands.Cog):
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Session(bot))
+
+
+if __name__ == "__main__":
+    print("Running session.py self-test...")
+    try:
+        from backend.data import load_players, select_auction_pool
+        from bot.session_state import clear_session, get_session
+    except Exception as e:
+        print("Import error in session.py:", repr(e))

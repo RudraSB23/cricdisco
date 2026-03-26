@@ -7,7 +7,7 @@ to build their teams.
 
 from typing import Set
 
-from models import Player, Team
+from backend.models import Player, Team
 
 
 def run_auction(

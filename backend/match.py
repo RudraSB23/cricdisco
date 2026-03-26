@@ -7,7 +7,7 @@ Handles ball-by-ball simulation of a 5-over match between two teams.
 import random
 from typing import Dict
 
-from models import InningsResult, MatchResult, Player, Team
+from backend.models import InningsResult, MatchResult, Player, Team
 
 
 def simulate_match(team_a: Team, team_b: Team, overs: int = 5) -> MatchResult:

@@ -9,7 +9,7 @@ import json
 import random
 from pathlib import Path
 
-from models import Player
+from backend.models import Player
 
 
 def load_players(path: str | Path) -> list[Player]:

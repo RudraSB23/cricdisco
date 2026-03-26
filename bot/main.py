@@ -38,16 +38,16 @@ logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
 handler.setFormatter(
     ColoredFormatter(
-        fmt="[%(asctime)s] %(levelname)s - %(message)s",
+        fmt="[%(asctime)s] %(levelname)s : %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 )
 logger.addHandler(handler)
 
 # Add project root to sys.path so bot.cogs can be imported
-project_root = Path(__file__).resolve().parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 intents = discord.Intents.default()
 intents.message_content = False
@@ -68,8 +68,8 @@ async def on_ready():
 
 
 async def load_cogs():
-    print(f"\n{'-' * 50}")
-    cogs_dir = project_root / "bot" / "cogs"
+    print(f"\n{'-' * 33} LOADING COGS {'-' * 33}")
+    cogs_dir = ROOT / "bot" / "cogs"
 
     for path in cogs_dir.glob("*.py"):
         if path.name.startswith("_"):
@@ -81,7 +81,7 @@ async def load_cogs():
         except Exception as e:
             logger.error(f"FAILED: {module_name}: {e}")
 
-    print(f"{'-' * 50}\n")
+    print(f"{'-' * 80}\n")
 
 
 def main() -> None:

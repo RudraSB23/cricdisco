@@ -119,3 +119,15 @@ class QuickPlay(commands.Cog):
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(QuickPlay(bot))
+
+
+if __name__ == "__main__":
+    # Minimal import/self-test to pinpoint import errors
+    print("Running quickplay.py self-test...")
+    try:
+        from backend.auction import quick_assign_players
+        from backend.match import simulate_match
+        from backend.models import MatchResult, Player, Team
+        from bot.session_state import get_session
+    except Exception as e:
+        print("Import error in quickplay.py:", repr(e))
