@@ -5,7 +5,10 @@ from discord import app_commands
 from discord.ext import commands
 
 from backend.data import load_players, select_auction_pool
+from bot.logging_config import get_cog_logger
 from bot.session_state import clear_session, get_session
+
+logger = get_cog_logger("Session")
 
 
 class Session(commands.Cog):
@@ -29,78 +32,179 @@ class Session(commands.Cog):
         squad_size: int = 6,
     ):
         if interaction.guild is None:
-            await interaction.response.send_message(
-                "Use this in a server, not in DMs.", ephemeral=True
+            embed = discord.Embed(
+                title="CricDisco • Error",
+                description="Use this command in a server, not in DMs.",
+                color=discord.Color.red(),
             )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
         session = get_session(interaction.guild.id, interaction.channel.id)  # type: ignore[arg-type]
 
         if session.active:
-            await interaction.response.send_message(
-                "A game is already active in this server. Use `/end_game` to reset.",
-                ephemeral=True,
+            embed = discord.Embed(
+                title="CricDisco • Session Active",
+                description=(
+                    "A game is already active in this channel.\n"
+                    "Use `/end_game` to reset the session."
+                ),
+                color=discord.Color.orange(),
             )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        # Make the thinking stage non-ephemeral so final message is public
+        await interaction.response.defer(ephemeral=False, thinking=True)
 
-        players = load_players("assets/unified_players.json")
-        pool = select_auction_pool(players, n=pool_size, method="top")
+        try:
+            players = load_players("backend/assets/unified_players.json")
+            pool = select_auction_pool(players, n=pool_size, method="top")
 
-        session.players = players
-        session.auction_pool = pool
-        session.teams = []
-        session.managers = []
-        session.manager_names = []
-        session.active = True
-        session.squad_size = squad_size
+            session.players = players
+            session.auction_pool = pool
+            session.teams = []
+            session.managers = []
+            session.team_names = []
+            session.active = True
+            session.squad_size = squad_size
+            session.owner_id = interaction.user.id  # organiser
 
-        await interaction.followup.send(
-            f"New CricDisco session started!\n"
-            f"- Pool size: **{pool_size}**\n"
-            f"- Squad size: **{squad_size}**\n\n"
-            f"Managers, use `/join_game` to join."
-        )
+            embed = discord.Embed(
+                title="CricDisco Session Started",
+                description="A new CricDisco session has been created in this channel.",
+                color=discord.Color.green(),
+            )
+            embed.add_field(
+                name="Organiser",
+                value=interaction.user.mention,
+                inline=False,
+            )
+            embed.add_field(
+                name="Pool size",
+                value=str(pool_size),
+                inline=True,
+            )
+            embed.add_field(
+                name="Squad size",
+                value=str(squad_size),
+                inline=True,
+            )
+            embed.add_field(
+                name="Next steps",
+                value=(
+                    "Managers, use `/join_game` to join this session.\n"
+                    "**Tournament Mode**: Supports 2-6 teams.\n"
+                    "• 2 teams: Direct Final\n"
+                    "• 3-4 teams: League + Final\n"
+                    "• 5-6 teams: League + Semi-Finals + Final"
+                ),
+                inline=False,
+            )
+
+            # This is already non-ephemeral
+            await interaction.followup.send(embed=embed, ephemeral=False)
+
+        except Exception as e:
+            logger.error(f"[start_game] ERROR: {type(e).__name__}: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
+            embed = discord.Embed(
+                title="CricDisco • Error",
+                description=f"Failed to start game.\n`{type(e).__name__}: {e}`",
+                color=discord.Color.red(),
+            )
+            # Error can stay ephemeral or public; keeping it private here
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(
         name="join_game",
         description="Join the current CricDisco session as a manager.",
     )
-    async def join_game(self, interaction: discord.Interaction):
+    @app_commands.describe(
+        team_name="Your team name (e.g., 'Mumbai Titans', 'Chennai Kings')",
+    )
+    async def join_game(
+        self,
+        interaction: discord.Interaction,
+        team_name: str,
+    ):
         if interaction.guild is None:
-            await interaction.response.send_message(
-                "Use this in a server.", ephemeral=True
+            embed = discord.Embed(
+                title="CricDisco • Error",
+                description="Use this command in a server.",
+                color=discord.Color.red(),
             )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
         session = get_session(interaction.guild.id, interaction.channel.id)  # type: ignore[arg-type]
 
         if not session.active:
-            await interaction.response.send_message(
-                "No active game. Use `/start_game` first.", ephemeral=True
+            embed = discord.Embed(
+                title="CricDisco • No Active Session",
+                description="There is no active game in this channel.\nUse `/start_game` first.",
+                color=discord.Color.orange(),
             )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
         if interaction.user.id in session.managers:
-            await interaction.response.send_message(
-                "You are already a manager in this session.", ephemeral=True
+            embed = discord.Embed(
+                title="CricDisco • Already Joined",
+                description="You are already a manager in this session.",
+                color=discord.Color.orange(),
             )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        if len(session.managers) >= 4:
-            await interaction.response.send_message(
-                "Maximum 4 managers reached.", ephemeral=True
+        if len(session.managers) >= 6:
+            embed = discord.Embed(
+                title="CricDisco • Lobby Full",
+                description=(
+                    "Maximum of 6 managers has been reached for this session.\n\n"
+                    "**Tournament Mode:**\n"
+                    "• 2 teams: Direct Final\n"
+                    "• 3-4 teams: League + Final\n"
+                    "• 5-6 teams: League + Semi-Finals + Final"
+                ),
+                color=discord.Color.red(),
             )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
         session.managers.append(interaction.user.id)
-        session.manager_names.append(interaction.user.display_name)
+        session.team_names.append(team_name)
 
-        await interaction.response.send_message(
-            f"{interaction.user.mention} joined as manager #{len(session.managers)}.",
-            ephemeral=False,
+        # Determine tournament info based on number of teams
+        num_teams = len(session.managers)
+        if num_teams == 2:
+            format_info = "Direct Final (1 match)"
+        elif num_teams in [3, 4]:
+            format_info = "League phase + Final"
+        else:
+            format_info = "League phase + Semi-Finals + Final"
+
+        embed = discord.Embed(
+            title="CricDisco • Manager Joined",
+            description=(
+                f"{interaction.user.mention} joined as **{team_name}** "
+                f"(Manager #{num_teams})."
+            ),
+            color=discord.Color.blurple(),
         )
+        embed.add_field(
+            name="Tournament Format",
+            value=format_info,
+            inline=False,
+        )
+        if session.owner_id is not None:
+            embed.set_footer(
+                text="Organiser can start the tournament with /quickplay when ready."
+            )
+
+        await interaction.response.send_message(embed=embed, ephemeral=False)
 
     @app_commands.command(
         name="end_game",
@@ -108,25 +212,43 @@ class Session(commands.Cog):
     )
     async def end_game(self, interaction: discord.Interaction):
         if interaction.guild is None:
-            await interaction.response.send_message(
-                "Use this in a server.", ephemeral=True
+            embed = discord.Embed(
+                title="CricDisco • Error",
+                description="Use this command in a server.",
+                color=discord.Color.red(),
             )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        session = get_session(interaction.guild.id, interaction.channel.id)  # type: ignore[arg-type]
+
+        if not session.active:
+            embed = discord.Embed(
+                title="CricDisco • No Active Session",
+                description="There is no active game to end in this channel.",
+                color=discord.Color.orange(),
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        if session.owner_id is not None and interaction.user.id != session.owner_id:
+            embed = discord.Embed(
+                title="CricDisco • Permission Denied",
+                description="Only the organiser who ran `/start_game` can end this session.",
+                color=discord.Color.red(),
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
         clear_session(interaction.guild.id)
-        await interaction.response.send_message(
-            "CricDisco session ended and state cleared."
+
+        embed = discord.Embed(
+            title="CricDisco Session Ended",
+            description=f"Session ended and state cleared by {interaction.user.mention}.",
+            color=discord.Color.dark_red(),
         )
+        await interaction.response.send_message(embed=embed)
 
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Session(bot))
-
-
-if __name__ == "__main__":
-    print("Running session.py self-test...")
-    try:
-        from backend.data import load_players, select_auction_pool
-        from bot.session_state import clear_session, get_session
-    except Exception as e:
-        print("Import error in session.py:", repr(e))

@@ -36,6 +36,7 @@ class Team:
 
     Attributes:
         manager_name: Name of the human manager.
+        manager_id: Discord user ID of the manager.
         budget: Remaining budget in crore (optional, can be very large).
         players: List of players drafted to this team.
     """
@@ -43,6 +44,7 @@ class Team:
     manager_name: str
     budget: float
     players: list[Player] = field(default_factory=list)
+    manager_id: int | None = None
 
 
 @dataclass
@@ -90,5 +92,6 @@ class MatchResult:
 
     team_a_result: InningsResult
     team_b_result: InningsResult
-    winner: str | None
+    winner: Optional[str]
     margin: str
+    man_of_the_match: Optional[str] = None
