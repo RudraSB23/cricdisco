@@ -5,6 +5,8 @@ Handles the player auction phase where managers bid on players
 to build their teams.
 """
 
+from typing import Set
+
 from models import Player, Team
 
 
@@ -24,9 +26,9 @@ def run_auction(
             print("\nAll teams have reached the squad size. AUCTION ENDED")
             break
 
-        active_managers: Set[str] = (
+        active_managers: Set[str] = {
             t.manager_name for t in teams if len(t.players) < squad_size
-        )
+        }
 
         winner_name, final_price = auction_player(player, teams, active_managers)
 
@@ -138,3 +140,56 @@ def display_squads(teams: list[Team]) -> None:
                     f"Rating: {p.overall_rating}, Base: {p.base_price} Cr)"
                 )
         print()
+
+
+# ----------------------------------------------------
+# TESTING FUNCTIONS
+# ----------------------------------------------------
+
+
+def quick_assign_players(
+    players: list[Player],
+    manager_names: list[str],
+    squad_size: int = 6,
+    starting_budget: float = 20.0,
+) -> list[Team]:
+    """Fast, non-interactive assignment of players to teams for testing.
+
+    Players are shuffled and then assigned round-robin to managers
+    until squads reach squad_size or players run out.
+    """
+    import random
+
+    # Initialize teams
+    teams: list[Team] = [
+        Team(manager_name=name, budget=starting_budget) for name in manager_names
+    ]
+
+    pool = list(players)
+    random.shuffle(pool)
+
+    team_idx = 1  # start from second manager for fun
+    while pool and any(len(t.players) < squad_size for t in teams):
+        player = pool.pop(0)
+
+        # Find next team that still has room
+        attempts = 0
+        while attempts < len(teams) and len(teams[team_idx].players) >= squad_size:
+            team_idx = (team_idx + 1) % len(teams)
+            attempts += 1
+
+        if len(teams[team_idx].players) >= squad_size:
+            # everyone full
+            break
+
+        team = teams[team_idx]
+        team.players.append(player)
+        # Optional: simple cost = base_price, subtract from budget
+        cost = player.base_price
+        if cost > team.budget:
+            cost = team.budget
+        team.budget -= cost
+
+        team_idx = (team_idx + 1) % len(teams)
+
+    return teams
