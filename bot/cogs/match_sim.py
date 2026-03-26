@@ -12,8 +12,9 @@ from typing import Any, Dict, List, Tuple
 import discord
 from discord.ext import commands
 
-from backend.match import simulate_ball
+from backend.match import select_playing_xi, simulate_ball
 from backend.match_state import (
+    build_commentary,
     build_innings_state,
     finalize_innings,
     get_batting_order,
@@ -177,41 +178,6 @@ async def start_match_for_channel(
 
     # Assume caller already did interaction.response.defer();
     await interaction.followup.send(embed=start_embed, view=view)
-
-
-def build_innings_state(
-    innings_num: int,
-    batting_team_name: str,
-    bowling_team_name: str,
-    batting_xi,
-    bowling_xi,
-    overs: int,
-    target: int | None,
-) -> Dict[str, Any]:
-    batting_order = get_batting_order(batting_xi)
-    bowling_rotation = get_bowling_rotation(bowling_xi)
-
-    return {
-        "innings_num": innings_num,
-        "overs": overs,
-        "runs": 0,
-        "wickets": 0,
-        "balls": 0,
-        "current_over": 0,
-        "batting_team_name": batting_team_name,
-        "bowling_team_name": bowling_team_name,
-        "batting_order": batting_order,
-        "bowling_rotation": bowling_rotation,
-        "striker_index": 0,
-        "non_striker_index": 1 if len(batting_order) > 1 else 0,
-        "completed": False,
-        "ball_log": [],
-        "target": target,
-        "current_bowler": None,
-        # Player performance tracking for MoM
-        "batter_runs": {},  # player_name -> runs scored
-        "bowler_wickets": {},  # player_name -> wickets taken
-    }
 
 
 class TossChoiceView(discord.ui.View):
@@ -496,10 +462,10 @@ class OverControlView(discord.ui.View):
             inline=False,
         )
 
-        score_line = f"{runs}/{wickets} in {balls // 6}.{balls % 6} overs"
-        if target:
-            remaining = target - runs
-            balls_left = (overs * 6) - balls
+        score_line = f"{state['runs']}/{state['wickets']} in {state['balls'] // 6}.{state['balls'] % 6} overs"
+        if state["target"]:
+            remaining = state["target"] - state["runs"]
+            balls_left = (state["overs"] * 6) - state["balls"]
             if remaining > 0:
                 score_line += f"\nNeed **{remaining}** from **{balls_left}** balls"
             else:
@@ -1256,246 +1222,6 @@ class MatchStatsView(discord.ui.View):
                 color=discord.Color.red(),
             )
             await interaction.response.send_message(embed=error_embed, ephemeral=True)
-
-
-def decide_result(
-    team_a_name: str,
-    team_b_name: str,
-    innings_a: InningsResult,
-    innings_b: InningsResult,
-    innings_a_perf: Dict[str, Any],
-    innings_b_perf: Dict[str, Any],
-) -> MatchResult:
-    # Decide winner + margin
-    if innings_a.runs > innings_b.runs:
-        winner = team_a_name
-        margin = f"wins by {innings_a.runs - innings_b.runs} runs"
-    elif innings_b.runs > innings_a.runs:
-        wickets_left = 10 - innings_b.wickets
-        wickets_left = max(wickets_left, 1)
-        margin = f"wins by {wickets_left} wicket" + ("s" if wickets_left > 1 else "")
-        winner = team_b_name
-    else:
-        winner = None
-        margin = "match tied"
-
-    # Calculate Man of the Match based on player performances
-    mom = calculate_man_of_the_match(
-        innings_a_perf=innings_a_perf,
-        innings_b_perf=innings_b_perf,
-        team_a_name=team_a_name,
-        team_b_name=team_b_name,
-        winning_team=winner,
-    )
-
-    return MatchResult(
-        team_a_result=innings_a,
-        team_b_result=innings_b,
-        winner=winner,
-        margin=margin,
-        man_of_the_match=mom,
-    )
-
-
-def calculate_man_of_the_match(
-    innings_a_perf: Dict[str, Any],
-    innings_b_perf: Dict[str, Any],
-    team_a_name: str,
-    team_b_name: str,
-    winning_team: str | None,
-) -> str | None:
-    """
-    MoM scoring:
-    - 1 point per run scored
-    - 25 points per wicket
-    - minus runs conceded (so cheaper spells are better)
-    - +10 bonus if in winning team
-    """
-    player_scores: Dict[str, int] = {}
-    player_teams: Dict[str, str] = {}
-
-    # Innings 1: team_a batting, team_b bowling
-    for batter_name, runs in innings_a_perf.get("batter_runs", {}).items():
-        player_scores[batter_name] = player_scores.get(batter_name, 0) + runs
-        player_teams[batter_name] = team_a_name
-
-    for bowler_name, wickets in innings_a_perf.get("bowler_wickets", {}).items():
-        runs_conceded = innings_a_perf.get("bowler_runs_conceded", {}).get(
-            bowler_name, 0
-        )
-        score = 25 * wickets - runs_conceded
-        player_scores[bowler_name] = player_scores.get(bowler_name, 0) + score
-        player_teams[bowler_name] = team_b_name
-
-    # Innings 2: team_b batting, team_a bowling
-    for batter_name, runs in innings_b_perf.get("batter_runs", {}).items():
-        player_scores[batter_name] = player_scores.get(batter_name, 0) + runs
-        player_teams[batter_name] = team_b_name
-
-    for bowler_name, wickets in innings_b_perf.get("bowler_wickets", {}).items():
-        runs_conceded = innings_b_perf.get("bowler_runs_conceded", {}).get(
-            bowler_name, 0
-        )
-        score = 25 * wickets - runs_conceded
-        player_scores[bowler_name] = player_scores.get(bowler_name, 0) + score
-        player_teams[bowler_name] = team_a_name
-
-    if not player_scores:
-        return None
-
-    # Winning team bonus
-    if winning_team is not None:
-        best_player = None
-        best_score = -(10**9)
-        for player, base_score in player_scores.items():
-            bonus = 10 if player_teams.get(player) == winning_team else 0
-            total = base_score + bonus
-            if total > best_score:
-                best_score = total
-                best_player = player
-        return best_player
-
-    return max(player_scores, key=player_scores.get)
-
-
-def calculate_match_stats(
-    innings_a_perf: Dict[str, Any],
-    innings_b_perf: Dict[str, Any],
-    team_a_name: str,
-    team_b_name: str,
-) -> Dict[str, Dict[str, Any]]:
-    """Calculate comprehensive match statistics for all players."""
-    player_stats: Dict[str, Dict[str, Any]] = {}
-
-    # Process both innings
-    for innings_perf, batting_team, bowling_team in [
-        (innings_a_perf, team_a_name, team_b_name),
-        (innings_b_perf, team_b_name, team_a_name),
-    ]:
-        # Batting stats
-        for player_name in innings_perf.get("batter_runs", {}).keys():
-            if player_name not in player_stats:
-                player_stats[player_name] = {
-                    "team": batting_team,
-                    "batting": {
-                        "runs": 0,
-                        "balls_faced": 0,
-                        "fours": 0,
-                        "sixes": 0,
-                        "strike_rate": 0.0,
-                        "not_out": True,
-                    },
-                    "bowling": {
-                        "overs": 0.0,
-                        "runs_conceded": 0,
-                        "wickets": 0,
-                        "economy": 0.0,
-                    },
-                }
-            player_stats[player_name]["batting"]["runs"] += innings_perf[
-                "batter_runs"
-            ].get(player_name, 0)
-            player_stats[player_name]["batting"]["balls_faced"] += innings_perf.get(
-                "batter_balls", {}
-            ).get(player_name, 0)
-            player_stats[player_name]["batting"]["fours"] += innings_perf.get(
-                "batter_fours", {}
-            ).get(player_name, 0)
-            player_stats[player_name]["batting"]["sixes"] += innings_perf.get(
-                "batter_sixes", {}
-            ).get(player_name, 0)
-
-        # Bowling stats
-        for player_name in innings_perf.get("bowler_wickets", {}).keys():
-            if player_name not in player_stats:
-                player_stats[player_name] = {
-                    "team": bowling_team,
-                    "batting": {
-                        "runs": 0,
-                        "balls_faced": 0,
-                        "fours": 0,
-                        "sixes": 0,
-                        "strike_rate": 0.0,
-                        "not_out": True,
-                    },
-                    "bowling": {
-                        "overs": 0.0,
-                        "runs_conceded": 0,
-                        "wickets": 0,
-                        "economy": 0.0,
-                        "balls": 0,  # Initialize balls key
-                    },
-                }
-            player_stats[player_name]["bowling"]["wickets"] += innings_perf[
-                "bowler_wickets"
-            ].get(player_name, 0)
-            player_stats[player_name]["bowling"]["balls"] = innings_perf.get(
-                "bowler_balls", {}
-            ).get(player_name, 0)
-            player_stats[player_name]["bowling"]["runs_conceded"] += innings_perf.get(
-                "bowler_runs_conceded", {}
-            ).get(player_name, 0)
-
-    # Calculate derived stats
-    for stats in player_stats.values():
-        # Batting strike rate
-        if stats["batting"]["balls_faced"] > 0:
-            stats["batting"]["strike_rate"] = (
-                stats["batting"]["runs"] / stats["batting"]["balls_faced"]
-            ) * 100
-
-        # Bowling economy and overs (ensure balls key exists)
-        balls_bowled = stats["bowling"].get("balls", 0)
-        if balls_bowled > 0:
-            stats["bowling"]["overs"] = balls_bowled / 6
-            stats["bowling"]["economy"] = (
-                stats["bowling"]["runs_conceded"] / stats["bowling"]["overs"]
-            )
-
-    return player_stats
-
-
-def build_commentary(
-    over_num: int,
-    runs_in_over: int,
-    wickets_in_over: int,
-    total_runs: int,
-    total_wkts: int,
-    target: int | None,
-    balls_bowled: int,
-    max_balls: int,
-) -> str:
-    bits: List[str] = []
-
-    if wickets_in_over >= 2:
-        bits.append(
-            f"Over {over_num}: Huge moment for the bowlers – {wickets_in_over} wickets!"
-        )
-    elif wickets_in_over == 1:
-        bits.append(f"Over {over_num}: Breakthrough! That wicket could shift momentum.")
-    elif runs_in_over >= 12:
-        bits.append(
-            f"Over {over_num}: Batters cut loose, big over with {runs_in_over} runs."
-        )
-    elif runs_in_over <= 2:
-        bits.append(
-            f"Over {over_num}: Tight, miserly bowling – just {runs_in_over} off it."
-        )
-    else:
-        bits.append(f"Over {over_num}: Decent over, both sides trading punches.")
-
-    if target is not None:
-        remaining = target - total_runs
-        balls_left = max_balls - balls_bowled
-        if remaining > 0:
-            bits.append(f"{remaining} needed from {balls_left} balls.")
-        else:
-            bits.append("They’ve hunted down the target in style!")
-
-    if not bits:
-        bits.append("Steady stuff, game nicely poised.")
-
-    return " ".join(bits)
 
 
 async def update_tournament_after_match(

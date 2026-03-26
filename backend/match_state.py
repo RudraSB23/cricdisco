@@ -221,6 +221,65 @@ def simulate_over(
     }
 
 
+def build_commentary(
+    over_num: int,
+    runs_in_over: int,
+    wickets_in_over: int,
+    total_runs: int,
+    total_wkts: int,
+    target: int | None,
+    balls_bowled: int,
+    max_balls: int,
+) -> str:
+    """
+    Build commentary text for an over.
+
+    Args:
+        over_num: Current over number
+        runs_in_over: Runs scored in this over
+        wickets_in_over: Wickets taken in this over
+        total_runs: Total runs in innings
+        total_wkts: Total wickets in innings
+        target: Target to chase (None if first innings)
+        balls_bowled: Balls bowled so far
+        max_balls: Maximum balls in innings
+
+    Returns:
+        Commentary string
+    """
+    bits: List[str] = []
+
+    if wickets_in_over >= 2:
+        bits.append(
+            f"Over {over_num}: Huge moment for the bowlers – {wickets_in_over} wickets!"
+        )
+    elif wickets_in_over == 1:
+        bits.append(f"Over {over_num}: Breakthrough! That wicket could shift momentum.")
+    elif runs_in_over >= 12:
+        bits.append(
+            f"Over {over_num}: Batters cut loose, big over with {runs_in_over} runs."
+        )
+    elif runs_in_over <= 2:
+        bits.append(
+            f"Over {over_num}: Tight, miserly bowling – just {runs_in_over} off it."
+        )
+    else:
+        bits.append(f"Over {over_num}: Decent over, both sides trading punches.")
+
+    if target is not None:
+        remaining = target - total_runs
+        balls_left = max_balls - balls_bowled
+        if remaining > 0:
+            bits.append(f"{remaining} needed from {balls_left} balls.")
+        else:
+            bits.append("They've hunted down the target in style!")
+
+    if not bits:
+        bits.append("Steady stuff, game nicely poised.")
+
+    return " ".join(bits)
+
+
 def finalize_innings(
     state: Dict[str, Any],
     InningsResult_class,
